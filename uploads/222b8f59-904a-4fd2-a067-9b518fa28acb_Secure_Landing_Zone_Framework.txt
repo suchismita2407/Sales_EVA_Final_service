@@ -1,0 +1,21 @@
+Secure Landing Zone Framework
+---------------------------------------------
+This framework provides a secure, compliant and scalable foundation for enterprise cloud adoption.
+
+Capabilities:
+• Azure & AWS Landing Zone modules
+• Identity segregation using role-based access control (RBAC)
+• Network segmentation—Hub-Spoke architecture model
+• Managed container orchestration blueprint
+• Data sovereignty controls for US, EU, MEA and APAC regions
+• Blue-Green environment support
+
+Security Coverage:
+• Encryption Enforcement Templates
+• Key Management Automation
+• Zero-Trust Network Controls
+
+Primary Benefits:
+• Accelerated onboarding of workloads
+• Reduced breach risk with automated compliance testing
+• Standardized security guardrails

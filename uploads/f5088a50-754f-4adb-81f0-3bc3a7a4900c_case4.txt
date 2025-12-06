@@ -1,0 +1,31 @@
+BFSI – Case Study 1
+Modernization of Legacy Core Banking Apps for One of the Top U.S. Banks
+
+Industry: BFSI
+
+Problem
+
+Bank was facing heavy operational burden due to legacy COBOL-based systems spread across 120+ branches.
+Key pain areas:
+
+Slow account onboarding (avg 9 days)
+
+High compliance failures (>18 findings per audit)
+
+Systems not cloud scalable
+
+Solution Delivered
+
+✔ Cloud native modernization using Azure App Services
+✔ Claims processing workflow moved to microservices
+✔ Automated control checks with AI models
+✔ Data warehouse modernization to Synapse
+
+Business Outcomes
+
+🔹 Reduced onboarding time from 9 days → <3 days
+🔹 Audit failures reduced by 72%
+🔹 Yearly infrastructure cost reduced by $1.8M
+
+Link
+ placeholder: https://tcs.com/bfsi-modernization-case-1

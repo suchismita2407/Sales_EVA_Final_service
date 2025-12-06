@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sales EVA - Opportunity Detail</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+
+  <style>
+    body {
+      background: #f1f6fb;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .navbar-brand { font-weight: 600; }
+    .card-eva {
+      border-radius: 12px;
+      border: 1px solid #dbe4f0;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+      background: #fff;
+    }
+    .section-title {
+      font-weight: 600;
+      color: #082654;
+      font-size: 0.95rem;
+    }
+    .badge-pill {
+      border-radius: 999px;
+      padding: 0.25rem 0.7rem;
+      font-size: 0.75rem;
+    }
+    .fit-high { background-color: #d1f2e5; color: #0f5132; }
+    .fit-medium { background-color: #fff3cd; color: #856404; }
+    .fit-low { background-color: #f8d7da; color: #842029; }
+    .requirement-line {
+      font-size: 0.9rem;
+      padding: 0.25rem 0;
+      border-bottom: 1px dashed #e0e0e0;
+    }
+  </style>
+</head>
+
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark" style="background: linear-gradient(90deg, #082654, #0b3b7d);">
+    <div class="container-fluid px-4">
+      <a class="navbar-brand" href="dashboard.html">Sales EVA</a>
+      <div class="d-flex align-items-center gap-3">
+        <span class="text-light small">Opportunity Detail</span>
+        <button class="btn btn-sm btn-outline-light" onclick="window.location.href='/'">
+  Back to Dashboard
+</button>
+
+      </div>
+    </div>
+  </nav>
+
+
+  <div class="container-fluid mt-4 px-4">
+    <div class="row g-3">
+
+      <!-- LEFT SIDE -->
+      <div class="col-lg-7">
+
+        <div class="card card-eva p-3 mb-3">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <h5 id="oppName">Loading...</h5>
+              <div class="small text-muted">
+                Client: <span id="oppClient">--</span> •
+                Industry: <span id="oppIndustry">--</span> •
+                Stage: <span id="oppStage">--</span>
+              </div>
+              <div class="small">Deal Value: <strong id="oppValue">--</strong></div>
+            </div>
+            <div class="text-end">
+              <div class="section-title mb-1">Fit Score</div>
+              <span id="oppFitBadge" class="badge badge-pill fit-medium">--%</span>
+            </div>
+          </div>
+        </div>
+
+
+        <div class="card card-eva p-3 mb-3">
+          <div class="d-flex justify-content-between mb-2">
+            <div class="section-title">Client Requirements (RFP Extract)</div>
+            <span class="badge bg-light text-dark badge-pill">Scope</span>
+          </div>
+          <div id="requirementsList"></div>
+        </div>
+
+
+        <div class="card card-eva p-3 mb-3">
+          <div class="section-title mb-1">Opportunity Notes</div>
+          <p id="oppNotes" class="small mb-0"></p>
+        </div>
+
+      </div>
+
+      <!-- RIGHT SIDE -->
+      <div class="col-lg-5">
+
+        <div class="card card-eva p-3 mb-3">
+          <div class="section-title mb-2">EVA Actions</div>
+          <div class="d-grid gap-2">
+
+            <button class="btn btn-primary btn-sm" onclick="matchSolutions()">
+              🔍 Match Solutions & Offerings
+            </button>
+
+            <!-- This top button should be disabled because offering_id is unknown initially -->
+            <button class="btn btn-outline-primary btn-sm" disabled>
+              ⚖️ Analyze Gaps (Select offering below)
+            </button>
+            
+
+            <button class="btn btn-outline-secondary btn-sm" onclick="fetchCaseStudies()">
+              📚 View Industry Case Studies
+            </button>
+
+          </div>
+        </div>
+
+
+        <div class="card card-eva p-3 mb-3">
+          <div class="d-flex justify-content-between">
+            <div class="section-title">Recommended Solution Pack</div>
+            <span class="badge bg-light text-dark badge-pill">AI Ranked</span>
+          </div>
+          <div id="solutionsContainer" class="small text-muted">
+            Click "Match Solutions" to see recommendations.
+          </div>
+        </div>
+
+
+        <div class="card card-eva p-3 mb-3">
+          <div class="d-flex justify-content-between">
+            <div class="section-title">Gap Analysis</div>
+            <span class="badge bg-light text-dark badge-pill">Coverage</span>
+          </div>
+          <div id="gapsContainer" class="small text-muted">
+            Click on Offering → Analyze Gaps
+          </div>
+        </div>
+
+
+        <div class="card card-eva p-3 mb-3">
+          <div class="d-flex justify-content-between">
+            <div class="section-title">Relevant Case Studies</div>
+            <span class="badge bg-light text-dark badge-pill">Industry</span>
+          </div>
+          <div id="casesContainer" class="small text-muted">
+            Click "View Industry Case Studies"
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+
+<script>
+
+function getParam(k){
+  return new URLSearchParams(window.location.search).get(k);
+}
+
+function fitClass(score) {
+  if (score >= 80) return "badge badge-pill fit-high";
+  if (score >= 60) return "badge badge-pill fit-medium";
+  return "badge badge-pill fit-low";
+}
+
+async function loadOpportunity(){
+  const id = getParam("id");
+  const res = await fetch(`/api/opportunities/${id}`);
+  const opp = await res.json();
+  window.currentOpportunity = opp;
+
+  document.getElementById("oppName").textContent = opp.name;
+  document.getElementById("oppClient").textContent = opp.client;
+  document.getElementById("oppIndustry").textContent = opp.industry;
+  document.getElementById("oppStage").textContent = opp.stage;
+  document.getElementById("oppValue").textContent = opp.value;
+
+  const badge = document.getElementById("oppFitBadge");
+
+  // 👉 FIXED HERE
+  const score = opp.fit_score || 0;
+  badge.textContent = score + "%";
+  badge.className = fitClass(score);
+
+document.getElementById("oppNotes").textContent = opp.description || "No notes.";
+
+  let reqDiv = document.getElementById("requirementsList");
+  reqDiv.innerHTML = "";
+  opp.requirements.split("\n").forEach(r => reqDiv.innerHTML += `<div class="requirement-line">• ${r}</div>`);
+
+  fetchCaseStudies(opp.industry);
+}
+
+
+async function matchSolutions() {
+  const opp = window.currentOpportunity;
+  if (!opp) return;
+
+  const response = await fetch("/api/match_solutions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ opportunity_id: opp.id })
+  });
+
+  const matches = await response.json();
+
+  const container = document.getElementById("solutionsContainer");
+  container.innerHTML = "";
+
+  matches.forEach(item => {
+    container.innerHTML += `
+      <div class="small border rounded p-2 my-2 bg-light">
+        <div class="d-flex justify-content-between">
+            <strong>${item.offering_name}</strong>
+
+            <span class="badge bg-primary-subtle text-primary">
+                ${item.score ? item.score : 0}%
+            </span>
+        </div>
+        <small class="text-muted">${item.reason || "Relevant Offering"}</small><br/>
+
+<button class="btn btn-sm btn-outline-primary mt-2"
+        onclick="analyzeGaps(${item.offering_id})">
+    Analyze Gaps
+</button>
+
+<div class="mt-2 border rounded p-2">
+    <label class="small">Rate Recommendation:</label><br/>
+    <label class="small">Rate Recommendation:</label><br/>
+
+<input type="range" min="1" max="10" value="5"
+       id="rating_${item.offering_id}"
+       style="width:140px"
+       oninput="document.getElementById('rating_value_${item.offering_id}').innerText = this.value"/>
+
+<span id="rating_value_${item.offering_id}" class="ms-2 fw-bold text-primary">5</span>
+
+    
+    <textarea id="feedback_${item.offering_id}"
+              class="form-control form-control-sm mt-2"
+              placeholder="Your feedback here..."></textarea>
+
+    <button class="btn btn-sm btn-success mt-2"
+            onclick="submitFeedback(${item.offering_id})">
+        Submit Feedback
+    </button>
+</div>
+
+        
+      </div>`;
+  });
+}
+
+
+
+
+async function analyzeGaps(offeringId) {
+  const opp = window.currentOpportunity;
+  if (!offeringId) {
+    alert("Missing offering id!");
+    return;
+  }
+
+  const response = await fetch("/api/analyze_gaps", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      opportunity_id: opp.id,
+      offering_id: offeringId
+    })
+  });
+
+  const result = await response.json();
+
+  const container = document.getElementById("gapsContainer");
+  container.innerHTML = "";
+
+  ["covered", "partial", "missing"].forEach(type => {
+    const cls =
+      type === "covered"
+        ? "badge bg-success-subtle text-success"
+        : type === "partial"
+        ? "badge bg-warning-subtle text-warning"
+        : "badge bg-danger-subtle text-danger";
+
+    (result[type] || []).forEach(text => {
+      container.innerHTML += `
+        <div class="small mb-1">
+          <span class="${cls}">${type}</span> ${text}
+        </div>`;
+    });
+  });
+
+  // ADD Download button here
+  container.innerHTML += `
+    <button class="btn btn-sm btn-success mt-3"
+      onclick="window.location.href='/download_gap_report?opp_id=${opp.id}&offering_id=${offeringId}'">
+      📄 Download Gap Report
+    </button>`;
+}
+
+
+async function fetchCaseStudies(industry){
+  const res = await fetch(`/api/case_studies?industry=${industry}`);
+  const data = await res.json();
+  const div = document.getElementById("casesContainer");
+  div.innerHTML = "";
+
+  if (!data.length){
+    div.innerHTML = `<p class='text-muted small'>No case studies found.</p>`;
+    return;
+  }
+
+  data.forEach(cs=>{
+    div.innerHTML += `
+      <div class="border p-2 rounded small mb-2 bg-light">
+        <strong>${cs.title}</strong><br/>
+        <small>${cs.key_benefit || "--"}</small><br/>
+<a href="/uploads/${cs.file_link}" target="_blank">📄 View Document</a>
+      </div>`;
+  });
+}
+
+
+document.addEventListener("DOMContentLoaded", loadOpportunity);
+
+async function submitFeedback(offeringId) {
+  const opp = window.currentOpportunity;
+  const rating = document.getElementById(`rating_${offeringId}`).value;
+  const comments = document.getElementById(`feedback_${offeringId}`).value;
+
+  const res = await fetch("/api/save_feedback", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({
+          opportunity_id: opp.id,
+          offering_id: offeringId,
+          rating: rating,
+          comments: comments
+      })
+  });
+
+  const result = await res.json();
+  alert("Feedback saved successfully!");
+}
+
+</script>
+
+</body>
+</html>

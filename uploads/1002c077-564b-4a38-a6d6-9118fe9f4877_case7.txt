@@ -1,0 +1,6 @@
+Title: Treasury System Cloud Migration
+Industry: BFSI
+Key Benefit: Rapid reporting & better liquidity management
+Summary:
+A large European bank faced performance issues in treasury operations with batch-based overnight runs. TCS migrated the system to Azure Kubernetes Service with real-time reconciliation. Reporting cycle improved from daily to hourly.
+Link: https://tcs.com/bfsi-cloud-treasury-case-3

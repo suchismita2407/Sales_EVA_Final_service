@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Upload Case Study</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+<style>
+.card-eva {
+  background:#fff;
+  padding:20px;
+  border-radius:10px;
+  border:1px solid #dbe4f0;
+}
+</style>
+</head>
+
+<body>
+
+<nav class="navbar navbar-dark" style="background:#082654;">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="/dashboard">← Back</a>
+  </div>
+</nav>
+
+<div class="container mt-4">
+  <div class="card-eva">
+    <h5>Upload Case Study</h5>
+
+    <form id="uploadForm" enctype="multipart/form-data">
+      <label>Select Document</label>
+      <input type="file" name="file" class="form-control mb-3" required>
+
+      <button type="button" onclick="uploadCase()" class="btn btn-primary w-100">
+        Upload Document
+      </button>
+    </form>
+
+  </div>
+</div>
+
+<script>
+async function uploadCase() {
+  const formData = new FormData(document.getElementById("uploadForm"));
+  formData.append("type", "case");
+
+  const res = await fetch("/api/upload_case", {
+    method: "POST",
+    body: formData
+  });
+
+  const result = await res.json();
+  alert("Case study uploaded successfully!");
+
+  window.location.href = "/";
+}
+
+</script>
+
+</body>
+</html>

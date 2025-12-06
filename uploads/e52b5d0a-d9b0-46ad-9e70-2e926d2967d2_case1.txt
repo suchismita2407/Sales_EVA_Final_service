@@ -1,0 +1,22 @@
+SAP S/4HANA Migration for World’s Largest Supermarket Chain
+
+Industry: Retail
+
+Problem
+
+ERP fragmentation across countries; 9 regional SAP landscapes.
+
+Solution Delivered
+
+✔ Rapid 16-month S/4 migration
+✔ Global tax & inventory rule automation
+✔ Auto SKU reconciliation engine
+
+Business Results
+
+🔹 Inventory write-offs reduced by $23M annually
+🔹 Pricing rule execution time reduced from 19 hours → 2 hours
+🔹 Unified product catalogue of 43M SKUs
+
+Link
+ placeholder: https://tcs.com/retail-s4-case-4

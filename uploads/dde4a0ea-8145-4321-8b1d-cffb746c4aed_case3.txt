@@ -1,0 +1,26 @@
+Fraud Risk Analytics Implementation for a European Bank
+
+Industry: BFSI
+
+Problem
+
+Bank had increasing card frauds and high false positives in AML triggers.
+Monthly loss: €2M+
+
+Solution Delivered
+
+✔ AI-based anomaly detection
+✔ Real-time customer behavioral scoring
+✔ Graph-driven risk ranking
+✔ Automated SAR filing workflows
+
+Business Outcomes
+
+🔹 False positives reduced 55%
+🔹 Fraud loss reduced by €17M annually
+🔹 Regulatory SLA adherence 100%
+
+Link
+ placeholder: https://tcs.com/aml-fraud-prevention-case-2
+
+

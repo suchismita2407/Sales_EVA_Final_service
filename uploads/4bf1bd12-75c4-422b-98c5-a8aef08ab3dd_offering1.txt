@@ -1,0 +1,19 @@
+Hybrid Cloud Migration Suite
+
+Industry: BFSI, Manufacturing
+Description:
+End-to-end cloud transformation toolkit enabling modernization of legacy workloads and workloads hosted on-prem. Ensures predictable migration waves, integrated landing zone compliance, and zero-downtime cutover strategy.
+
+Key Capabilities:
+
+Automated asset discovery
+
+Azure & AWS landing zone set-up
+
+App modernization assessment
+
+Data migration playbooks
+
+Standard deployment templates
+
+Built-in FinOps tracking

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Offerings Catalog - Sales EVA</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+  />
+  <style>
+    body { background:#f1f6fb; font-family: system-ui; }
+    .card-eva {
+      border-radius:10px; border:1px solid #dbe4f0; background:#fff;
+      box-shadow: 0px 2px 6px rgba(0,0,0,0.05);
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-dark" style="background:#082654;">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="/">Sales EVA</a>
+    <span class="text-light small">Offerings Catalog</span>
+  </div>
+</nav>
+
+
+  <div class="container mt-4">
+    <div class="d-flex justify-content-between mb-3">
+      <h5>Explore Offerings</h5>
+      <button onclick="window.location='upload_offering.html'" class="btn btn-sm btn-primary">+ Add Offering</button>
+    </div>
+
+    <div class="row">
+      <div class="col-md-3 mb-3" onclick="window.location='offering_detail.html?id=1'">
+        <div class="card-eva p-3">
+          <h6>Hybrid Cloud Migration Suite</h6>
+          <small>BFSI | Cross Industry</small>
+          <hr/>
+          <small>14 Case Studies</small><br/>
+          <small>Owner: Cloud CoE</small>
+        </div>
+      </div>
+
+      <div class="col-md-3 mb-3" onclick="window.location='offering_detail.html?id=2'">
+        <div class="card-eva p-3">
+          <h6>S/4HANA Migration Toolkit</h6>
+          <small>Telecom | Manufacturing</small>
+          <hr/>
+          <small>11 Case Studies</small><br/>
+          <small>Owner: SAP Practice</small>
+        </div>
+      </div>
+
+      <div class="col-md-3 mb-3">
+        <div class="card-eva p-3">
+          <h6>GenAI for ITSM Accelerator</h6>
+          <small>Cross Industry</small>
+          <hr/>
+          <small>9 Case Studies</small><br/>
+          <small>Owner: Cognitive Team</small>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

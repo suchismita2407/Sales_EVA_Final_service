@@ -1,0 +1,23 @@
+5G Edge Deployment for Large Telco Group
+
+Industry: Telecom
+
+Problem
+
+High latency (80–100ms) for IoT-connected retail stores
+
+Solution Delivered
+
+✔ Built 5G edge gateways
+✔ Multi-cluster Kubernetes deployment
+✔ IBM/Tata Cyber Shield model for securing IoT edges
+
+Outcome
+
+🔹 Latency reduced from 100ms to 14ms
+🔹 16000 connected stores onboarded
+🔹 Enabled real-time store analytics
+
+Link
+ placeholder: https://tcs.com/telecom-edge-analytics-case-3
+

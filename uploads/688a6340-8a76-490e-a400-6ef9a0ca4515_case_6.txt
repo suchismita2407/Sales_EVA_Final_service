@@ -1,0 +1,6 @@
+Title: Modernization of Legacy Core Banking Platforms
+Industry: BFSI
+Key Benefit: Reduced onboarding time, lower compliance deviations
+Summary:
+A leading U.S. bank was operating on legacy COBOL applications spanning multiple regions. Customer onboarding was slow, audits were failing, and costs were rising. TCS modernized the core banking platform using Azure App Services, implemented microservices for claims automation, and migrated analytics to Azure Synapse.
+Link: https://tcs.com/bfsi-modernization-case-1

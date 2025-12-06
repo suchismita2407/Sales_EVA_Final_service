@@ -1,0 +1,6 @@
+langchain-openai
+flask
+python-dotenv
+chromadb
+langchain-openai
+openai   # optional, if you use OpenAI-compatible endpoint
