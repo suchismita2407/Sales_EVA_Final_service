@@ -1,5 +1,6 @@
 import os
 
+
 def extract_text_from_file(filepath):
     ext = os.path.splitext(filepath)[1].lower()
 
@@ -8,17 +9,19 @@ def extract_text_from_file(filepath):
     elif ext in [".doc", ".docx"]:
         return extract_doc(filepath)
     elif ext in [".txt"]:
-        return open(filepath, "r", encoding="utf-8").read()
+        with open(filepath, "r", encoding="utf-8") as file:
+            return file.read()
     else:
         return None
 
 
 def extract_pdf(filepath):
     import pypdf
-    reader = pypdf.PdfReader(open(filepath, 'rb'))
-    text = ""
-    for page in reader.pages:
-        text += page.extract_text() + "\n"
+    with open(filepath, "rb") as file:
+        reader = pypdf.PdfReader(file)
+        text = ""
+        for page in reader.pages:
+            text += (page.extract_text() or "") + "\n"
     return text
 
 

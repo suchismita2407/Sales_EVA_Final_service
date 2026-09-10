@@ -1,10 +1,15 @@
 import sqlite3
-from typing import Dict, Any, List
+from typing import Any
+
+from werkzeug.security import check_password_hash, generate_password_hash
+
 from config import Config
+
 
 def get_connection():
     conn = sqlite3.connect(Config.DATABASE_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 def init_db():
@@ -85,18 +90,27 @@ def init_db():
 
     conn.commit()
 
+    # Upgrade legacy plaintext passwords when an older database is opened.
+    cur.execute("SELECT id, password FROM users")
+    for user_id, password in cur.fetchall():
+        if password and not password.startswith(("scrypt:", "pbkdf2:", "argon2:")):
+            cur.execute(
+                "UPDATE users SET password=? WHERE id=?",
+                (generate_password_hash(password), user_id)
+            )
+
     # Seed a default user and some dummy data if empty
     cur.execute("SELECT COUNT(*) FROM users;")
     if cur.fetchone()[0] == 0:
         cur.execute(
             "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-            ("admin", "admin123", "admin")  # ⚠ In real app, hash passwords!
+            ("admin", generate_password_hash("admin123"), "admin")
         )
 
     conn.commit()
     conn.close()
 
-def query_all(sql: str, params: tuple = ()) -> List[Dict[str, Any]]:
+def query_all(sql: str, params: tuple = ()) -> list[dict[str, Any]]:
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(sql, params)
@@ -104,7 +118,7 @@ def query_all(sql: str, params: tuple = ()) -> List[Dict[str, Any]]:
     conn.close()
     return rows
 
-def query_one(sql: str, params: tuple = ()) -> Dict[str, Any] | None:
+def query_one(sql: str, params: tuple = ()) -> dict[str, Any] | None:
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(sql, params)
@@ -120,3 +134,11 @@ def execute(sql: str, params: tuple = ()) -> int:
     last_id = cur.lastrowid
     conn.close()
     return last_id
+
+
+def authenticate_user(username: str, password: str) -> dict[str, Any] | None:
+    """Return a user only when the supplied password matches its hash."""
+    user = query_one("SELECT * FROM users WHERE username = ?", (username,))
+    if user and check_password_hash(user["password"], password):
+        return user
+    return None

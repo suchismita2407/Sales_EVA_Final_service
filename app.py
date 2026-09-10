@@ -1,34 +1,65 @@
-import ssl
-ssl._create_default_https_context = ssl._create_unverified_context
+import json
+import logging
+import os
+import re
+import sqlite3
 
 from flask import (
-    Flask, render_template, request, redirect,
-    url_for, session, jsonify, send_file, send_from_directory
+    Flask,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    send_from_directory,
+    session,
+    url_for,
 )
-import os
-import json
-import re
+from werkzeug.security import generate_password_hash
 
 from config import Config
-from db import init_db, query_all, query_one, execute
+from db import authenticate_user, execute, init_db, query_all, query_one
+from services.doc_extractor import extract_text_from_file
+from services.input_validator import contains_prompt_injection, contains_sensitive_data
+from services.llm_service import get_embeddings
 from services.rag_service import (
-    match_solutions_for_opportunity,
     analyze_gaps,
     index_offering,
-    index_opportunity
+    index_opportunity,
+    match_solutions_for_opportunity,
 )
-from vector_store import offerings_col
-from services.upload_service import save_uploaded_file
-from services.doc_extractor import extract_text_from_file
-from services.llm_service import get_embeddings
 from services.report_service import generate_gap_pdf
-from services.input_validator import contains_sensitive_data, contains_prompt_injection
-
+from services.upload_service import save_uploaded_file
+from vector_store import offerings_col
 
 app = Flask(__name__)
 app.config.from_object(Config)
+app.logger.setLevel(logging.INFO)
 
 UPLOAD_DIR = os.path.abspath("uploads")
+
+
+@app.after_request
+def add_security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    return response
+
+
+@app.errorhandler(413)
+def request_too_large(_error):
+    return jsonify({"error": "Uploaded content exceeds the size limit"}), 413
+
+
+@app.get("/health")
+def health():
+    try:
+        query_one("SELECT 1")
+        return jsonify({"status": "ok", "database": "ok"})
+    except Exception:
+        app.logger.exception("Health check failed")
+        return jsonify({"status": "degraded", "database": "unavailable"}), 503
 
 
 # -------- AUTH -------
@@ -59,7 +90,7 @@ def login():
     username = request.form.get("username")
     password = request.form.get("password")
 
-    user = query_one("SELECT * FROM users WHERE username = ? AND password = ?", (username, password))
+    user = authenticate_user(username, password)
     if user:
         session["user_id"] = user["id"]
         session["username"] = user["username"]
@@ -160,16 +191,20 @@ def api_opportunities():
     industry = request.args.get("industry")
     stage = request.args.get("stage")
 
-    query = "SELECT * FROM opportunities WHERE 1=1"
+    clauses = []
     params = []
 
     if industry and industry != "":
-        query += " AND industry=?"
+        clauses.append("industry=?")
         params.append(industry)
 
     if stage and stage != "":
-        query += " AND stage=?"
+        clauses.append("stage=?")
         params.append(stage)
+
+    query = "SELECT * FROM opportunities"
+    if clauses:
+        query += " WHERE " + " AND ".join(clauses)
 
     opps_raw = query_all(query, tuple(params))
     results = []
@@ -266,7 +301,10 @@ def api_upload_document():
     if not file:
         return jsonify({"error": "file missing"}), 400
 
-    path = save_uploaded_file(file)
+    try:
+        path = save_uploaded_file(file)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
     extracted_text = extract_text_from_file(path)
 
     if not extracted_text:
@@ -298,9 +336,12 @@ def api_upload_document():
 @app.post("/api/create_opportunity")
 @login_required
 def api_create_opportunity():
-    from services.input_validator import contains_sensitive_data, contains_prompt_injection
+    from services.input_validator import (
+        contains_prompt_injection,
+        contains_sensitive_data,
+    )
 
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
 
     # Validate required fields
     required_fields = ["name", "client", "industry", "value", "stage", "description", "requirements"]
@@ -337,16 +378,16 @@ def api_create_opportunity():
                 data["requirements"]
             )
         )
-    except Exception as e:
-        print("DB ERROR", e)
+    except sqlite3.Error:
+        app.logger.exception("Opportunity creation failed")
         return jsonify({"error": "❌ Failed to create opportunity"}), 500
 
     # Fetch inserted record and add into vector DB
     opp_row = query_one("SELECT * FROM opportunities WHERE id=?", (opp_id,))
     try:
         index_opportunity(opp_row)
-    except Exception as e:
-        print("EMBEDDING ERROR", e)
+    except (RuntimeError, ValueError, OSError):
+        app.logger.exception("Opportunity indexing failed", extra={"opportunity_id": opp_id})
 
     return jsonify({"status": "created", "id": opp_id, "redirect": "/"}), 200
 
@@ -354,7 +395,7 @@ def api_create_opportunity():
 @app.post("/api/match_solutions")
 @login_required
 def api_match_solutions():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     opp_id = data.get("opportunity_id")
 
     matches = match_solutions_for_opportunity(opp_id)
@@ -363,7 +404,7 @@ def api_match_solutions():
 @app.post("/api/save_feedback")
 @login_required
 def api_save_feedback():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
 
     opp = data.get("opportunity_id")
     off = data.get("offering_id")
@@ -384,7 +425,7 @@ def api_save_feedback():
 @app.post("/api/analyze_gaps")
 @login_required
 def api_analyze_gaps():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     opp_id = data.get("opportunity_id")
     off_id = data.get("offering_id")
 
@@ -453,8 +494,8 @@ def api_case_studies():
             continue
 
         # safe extraction
-        benefit = row["benefit"] if "benefit" in row.keys() and row["benefit"] else "Not Available"
-        link = row["link"] if "link" in row.keys() and row["link"] else ""
+        benefit = row.get("benefit") or "Not Available"
+        link = row.get("link") or ""
 
         results.append({
             "id": row["id"],
@@ -471,21 +512,24 @@ def api_case_studies():
 @app.post("/api/upload_case")
 @login_required
 def api_upload_case():
-    print("\n================= CASE STUDY UPLOAD CALLED =================\n")
+    app.logger.info("Case study upload started")
 
     # Receive file
     file = request.files.get("file")
     if not file:
-        print("❌ No file received")
+        app.logger.warning("Case study upload missing file")
         return jsonify({"error": "File missing"}), 400
 
     # Save file
-    file_path = save_uploaded_file(file)
-    print(f"📁 Saved file to: {file_path}")
+    try:
+        file_path = save_uploaded_file(file)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    app.logger.info("Case study file saved")
 
     # extract text
     extracted_text = extract_text_from_file(file_path) or ""
-    print(f"📝 Extracted text length: {len(extracted_text)} chars")
+    app.logger.info("Case study text extracted", extra={"text_length": len(extracted_text)})
 
     from services.llm_service import get_llm
     llm = get_llm()
@@ -504,18 +548,10 @@ Extract data strictly in this JSON format:
 {extracted_text[:1500]}
 """
 
-    print("\n===== PROMPT GOING TO LLM =====")
-    print(prompt)
-    print("================================\n")
-
     reply = llm.invoke(prompt)
 
     # Catch failure cases
     raw = getattr(reply, "content", str(reply))
-    print("\n===== RAW MODEL RESPONSE =====")
-    print(raw)
-    print("================================\n")
-
     # Clean formatted json
     raw = raw.replace("```json", "").replace("```", "").strip()
 
@@ -523,12 +559,10 @@ Extract data strictly in this JSON format:
         json_match = re.search(r"\{[\s\S]*\}", raw)
         if json_match:
             data = json.loads(json_match.group(0))
-            print("🎯 Successfully extracted JSON:", data)
         else:
-            print("❌ JSON structure not found inside model response")
             raise ValueError("LLM did not return valid JSON")
-    except Exception as e:
-        print("❌ LLM PARSE FAILED:", e)
+    except (json.JSONDecodeError, ValueError):
+        app.logger.warning("LLM case study response was not valid JSON")
         data = {
             "title": file.filename,
             "industry": "General",
@@ -537,8 +571,6 @@ Extract data strictly in this JSON format:
 
     # Build relative path for frontend usage /uploads/<file>
     relative_path = os.path.join("uploads", os.path.basename(file_path))
-    print("📌 Storing DB file reference as:", relative_path)
-
     case_id = execute("""
         INSERT INTO case_studies(title, industry, benefit, link)
         VALUES (?,?,?,?)
@@ -548,8 +580,6 @@ Extract data strictly in this JSON format:
         data.get("key_benefit", "Insights Not Extracted"),
         relative_path
     ))
-
-    print(f"💾 CASE RECORD INSERTED ID → {case_id}")
 
     # Insert into vector DB
     from services.llm_service import get_embeddings
@@ -569,8 +599,7 @@ Extract data strictly in this JSON format:
         }]
     )
 
-    print(f"🧠 Embedded case study stored for ID: {case_id}")
-    print("\n================= CASE PROCESSING COMPLETE =================\n")
+    app.logger.info("Case study processing complete", extra={"case_id": case_id})
 
     return jsonify({"status": "saved", "id": case_id})
 
@@ -599,16 +628,18 @@ def register():
     # Save user
     execute(
         "INSERT INTO users(username, password, role) VALUES (?, ?, ?)",
-        (username, password, role)
+        (username, generate_password_hash(password), role)
     )
 
     return redirect(url_for("login"))
 @app.post("/api/chat")
 @login_required
 def chatbot_api():
-    from services.llm_service import get_llm, get_embeddings
-    from vector_store import offerings_col, case_studies_col
-    from services.llm_service import tracked_llm_call  # NEW IMPORT
+    from services.llm_service import (
+        get_embeddings,
+        tracked_llm_call,  # NEW IMPORT
+    )
+    from vector_store import case_studies_col, offerings_col
 
     data = request.get_json(force=True)
     user_query = (data.get("query") or "").strip().lower()
@@ -647,7 +678,6 @@ def chatbot_api():
     if any(q in user_query for q in general_questions):
         return jsonify({"answer": "I can answer about offerings, case studies and opportunities. Can you ask something related to offerings, solution fit, industry trends, client needs or opportunities?"})
 
-    llm = get_llm()
     emb = get_embeddings()
 
     query_vec = emb.embed_query(user_query)
@@ -658,7 +688,7 @@ def chatbot_api():
 
     def collect_docs(res, label):
         docs = []
-        if "documents" in res and res["documents"]:
+        if res.get("documents"):
             for d in res["documents"][0]:
                 if d:
                     docs.append(f"[{label}] {d}")

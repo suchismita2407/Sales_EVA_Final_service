@@ -1,13 +1,14 @@
-import os
 import json
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+import os
+
+from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib import colors
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from db import query_one
-from services.rag_service import analyze_gaps
 from services.llm_service import get_llm
+from services.rag_service import analyze_gaps
 
 
 def generate_gap_pdf(opp_id: int, offering_id: int):

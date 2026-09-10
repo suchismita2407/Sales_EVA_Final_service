@@ -1,24 +1,31 @@
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from config import Config
-import httpx
+import logging
 import os
-import tiktoken
-import ssl
 
-# Disable SSL verification everywhere (corporate proxy fix)
-ssl._create_default_https_context = ssl._create_unverified_context
-os.environ["REQUESTS_CA_BUNDLE"] = ""
-os.environ["CURL_CA_BUNDLE"] = ""
+import httpx
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+
+from config import Config
+
+logger = logging.getLogger(__name__)
+
+try:
+    from langfuse import observe
+except (ImportError, RuntimeError, TypeError):
+    def observe(**_kwargs):
+        def decorator(function):
+            return function
+        return decorator
 
 _llm = None
 _embeddings = None
 
-# HTTP client for TCS MaaS
-client = httpx.Client(verify=False)
+client = httpx.Client()
 
 def get_llm():
     global _llm
     if _llm is None:
+        if not Config.LLM_API_KEY:
+            raise RuntimeError("LLM_API_KEY is required for LLM features")
         _llm = ChatOpenAI(
             base_url=Config.LLM_BASE_URL,
             model=Config.LLM_MODEL,
@@ -27,10 +34,6 @@ def get_llm():
             http_client=client
         )
     return _llm
-
-import os
-from langfuse import observe
-from services.llm_service import get_llm
 
 @observe(name="eva-llm-response", as_type="generation")
 def tracked_llm_call(prompt: str):
@@ -59,7 +62,7 @@ def get_embeddings():
         )
 
         if os.path.exists(local_tokenizer_path):
-            print(">>> Using LOCAL tokenizer file")
+            logger.info("Using local tokenizer file")
 
             # Monkey patch 'read_file' so no HTTPS download happens
             import tiktoken.load
@@ -70,9 +73,10 @@ def get_embeddings():
             tiktoken.load.read_file = local_read_file
 
         else:
-            print("⚠ Local tokenizer NOT found — tokenizer download will FAIL!")
-            print("👉 You MUST place this file:")
-            print(local_tokenizer_path)
+            logger.warning(
+                "Local tokenizer not found; tokenizer download may fail: %s",
+                local_tokenizer_path,
+            )
 
         _embeddings = OpenAIEmbeddings(
             base_url=Config.LLM_BASE_URL,

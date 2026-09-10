@@ -1,5 +1,6 @@
 import re
 
+
 def contains_sensitive_data(text: str) -> bool:
     patterns = [
         r"\b\d{10}\b",  # phone numbers

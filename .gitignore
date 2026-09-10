@@ -1,1 +1,10 @@
 salesEnv/
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+chroma_data/
+uploads/
+reports/
+sales_eva.db

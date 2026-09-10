@@ -1,11 +1,11 @@
 import json
-from typing import List, Dict, Any
-from db import query_one, execute
-from services.llm_service import get_llm, get_embeddings
+
+from db import execute, query_one
+from services.llm_service import get_embeddings, get_llm
 from vector_store import offerings_col, opportunities_col
 
 
-def embed_text(text: str) -> List[float]:
+def embed_text(text: str) -> list[float]:
     emb = get_embeddings()
     return emb.embed_query(text)
 
@@ -76,7 +76,7 @@ Opportunity Details:
     # Try direct JSON parse
     try:
         ranked = json.loads(raw)
-    except:
+    except (json.JSONDecodeError, TypeError):
         # fallback
         ranked = [{"offering_id": c["offering_id"],
                    "fit_score": c["fit_score"],
@@ -139,7 +139,7 @@ Description: {off.get('description','')}
     # Clean formatting errors from LLM
     raw = raw.replace("```json", "").replace("```", "").strip()
 
-    import re, json
+    import re
 
     # Extract JSON reliably from anywhere
     try:
@@ -148,7 +148,7 @@ Description: {off.get('description','')}
             result = json.loads(match.group(0))
         else:
             raise ValueError("JSON not found")
-    except:
+    except (json.JSONDecodeError, ValueError, TypeError):
         result = {
             "covered": [],
             "partial": [],
