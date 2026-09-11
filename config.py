@@ -8,7 +8,7 @@ load_dotenv()
 class Config:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     SECRET_KEY = os.getenv("SECRET_KEY")
-    DATABASE_PATH = os.path.join(BASE_DIR, "sales_eva.db")
+    DATABASE_PATH = os.getenv("DATABASE_PATH", os.path.join(BASE_DIR, "sales_eva.db"))
     MAX_CONTENT_LENGTH = int(os.getenv("MAX_UPLOAD_BYTES", str(10 * 1024 * 1024)))
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"

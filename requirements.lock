@@ -59,6 +59,8 @@ colorama==0.4.6
     #   pytest
     #   tqdm
     #   typer
+coverage[toml]==7.16.0
+    # via pytest-cov
 distro==1.9.0
     # via
     #   langsmith
@@ -216,7 +218,9 @@ packaging==24.2
 pillow==12.3.0
     # via reportlab
 pluggy==1.6.0
-    # via pytest
+    # via
+    #   pytest
+    #   pytest-cov
 propcache==0.5.2
     # via
     #   aiohttp
@@ -251,6 +255,10 @@ pypika==0.51.1
 pyproject-hooks==1.2.0
     # via build
 pytest==9.1.1
+    # via
+    #   -r requirements.txt
+    #   pytest-cov
+pytest-cov==6.3.0
     # via -r requirements.txt
 python-dateutil==2.9.0.post0
     # via kubernetes

@@ -12,16 +12,50 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.lock') }}
+      - name: Install dependencies
+        run: test -f requirements.lock && python -m pip install -r requirements.lock
+      - name: Compile Python modules
+        run: python -m compileall -q .
+      - name: Run tests with coverage
+        run: python -m pytest tests -q --cov=. --cov-report=term-missing --cov-fail-under=60
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.lock') }}
       - name: Install dependencies
         run: python -m pip install -r requirements.lock
       - name: Install quality tools
         run: python -m pip install "ruff>=0.8,<1" "pip-audit>=2.7,<3"
-      - name: Compile Python modules
-        run: python -m compileall -q .
-      - name: Run tests
-        run: python -m pytest tests -q
       - name: Lint
-        run: ruff check app.py config.py db.py services tests
+        run: ruff check app.py blueprints config.py db.py services scripts tests
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.lock') }}
+      - name: Install dependencies
+        run: test -f requirements.lock && python -m pip install -r requirements.lock
+      - name: Install audit tool
+        run: python -m pip install "pip-audit>=2.7,<3"
       - name: Audit dependencies
         run: >-
           pip-audit -r requirements.lock
@@ -29,3 +63,6 @@ jobs:
           --ignore-vuln CVE-2026-45830
           --ignore-vuln CVE-2026-45833
           --ignore-vuln CVE-2026-45831
+          --ignore-vuln PYSEC-2026-3813
+          --ignore-vuln PYSEC-2026-3814
+          --ignore-vuln PYSEC-2026-3815

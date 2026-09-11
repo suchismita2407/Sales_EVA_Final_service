@@ -1,0 +1,20 @@
+services:
+  sales-eva:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_PATH: /app/data/sales_eva.db
+    ports:
+      - "5000:5000"
+    volumes:
+      - chroma-data:/app/chroma_data
+      - app-data:/app/data
+      - uploads:/app/uploads
+      - reports:/app/reports
+    restart: unless-stopped
+
+volumes:
+  chroma-data:
+  app-data:
+  uploads:
+  reports:

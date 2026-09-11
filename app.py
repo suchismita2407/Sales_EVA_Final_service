@@ -3,22 +3,22 @@ import logging
 import os
 import re
 import sqlite3
+import uuid
 
 from flask import (
     Flask,
+    has_request_context,
     jsonify,
-    redirect,
-    render_template,
     request,
     send_file,
     send_from_directory,
-    session,
-    url_for,
 )
-from werkzeug.security import generate_password_hash
 
+from blueprints.api import api_bp
+from blueprints.auth import auth_bp, login_required
+from blueprints.pages import pages_bp
 from config import Config
-from db import authenticate_user, execute, init_db, query_all, query_one
+from db import execute, init_db, query_all, query_one
 from services.doc_extractor import extract_text_from_file
 from services.input_validator import contains_prompt_injection, contains_sensitive_data
 from services.llm_service import get_embeddings
@@ -34,7 +34,46 @@ from vector_store import offerings_col
 
 app = Flask(__name__)
 app.config.from_object(Config)
+app.register_blueprint(auth_bp)
+app.register_blueprint(api_bp)
+app.register_blueprint(pages_bp)
 app.logger.setLevel(logging.INFO)
+
+
+class JsonFormatter(logging.Formatter):
+    def format(self, record):
+        payload = {
+            "level": record.levelname,
+            "message": record.getMessage(),
+            "logger": record.name,
+            "request_id": getattr(record, "request_id", None),
+        }
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+        return json.dumps(payload)
+
+
+class RequestContextFilter(logging.Filter):
+    def filter(self, record):
+        if has_request_context():
+            record.request_id = getattr(request, "request_id", None)
+        return True
+
+
+for handler in app.logger.handlers:
+    handler.setFormatter(JsonFormatter())
+    handler.addFilter(RequestContextFilter())
+
+
+@app.before_request
+def assign_request_id():
+    request.request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+
+
+@app.after_request
+def add_request_id(response):
+    response.headers["X-Request-ID"] = request.request_id
+    return response
 
 UPLOAD_DIR = os.path.abspath("uploads")
 
@@ -62,208 +101,8 @@ def health():
         return jsonify({"status": "degraded", "database": "unavailable"}), 503
 
 
-# -------- AUTH -------
-
-def login_required(f):
-    from functools import wraps
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        if "user_id" not in session:
-            return redirect(url_for("login"))
-        return f(*args, **kwargs)
-    return wrapper
-
-
-# -------- INIT DB -------
-
 with app.app_context():
     init_db()
-
-
-# -------- AUTH ROUTES -------
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "GET":
-        return render_template("login.html")
-
-    username = request.form.get("username")
-    password = request.form.get("password")
-
-    user = authenticate_user(username, password)
-    if user:
-        session["user_id"] = user["id"]
-        session["username"] = user["username"]
-        session["role"] = user["role"]
-        return redirect(url_for("dashboard"))
-
-    return render_template("login.html", error="Invalid credentials")
-
-
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("login"))
-
-
-# -------- PAGE ROUTES -------
-
-@app.route("/")
-@login_required
-def dashboard():
-    return render_template("dashboard.html")
-
-
-@app.route("/offerings")
-@login_required
-def offerings_page():
-    return render_template("offerings.html")
-
-
-@app.route("/upload_offering")
-@login_required
-def upload_offering_page():
-    return render_template("upload_offering.html")
-
-
-@app.route("/opportunity")
-@login_required
-def opportunity_page():
-    return render_template("opportunity.html")
-
-
-@app.route("/create_opportunity")
-@login_required
-def create_opportunity_page():
-    return render_template("create_opportunity.html")
-
-
-# -------- API ROUTES --------
-
-@app.route("/api/dashboard_stats")
-@login_required
-def api_dashboard_stats():
-    opps = query_all("SELECT * FROM opportunities")
-    total = len(opps)
-
-    # default value
-    avg_fit = 0.0
-    proposal_count = 0
-
-    if total:
-        fit_rows = query_all("""
-            SELECT fit_score FROM recommendations 
-            WHERE fit_score IS NOT NULL
-        """)
-
-        normalized_scores = []
-
-        for r in fit_rows:
-            raw = float(r["fit_score"])
-
-            # Normalize score > 1
-            if raw > 1:
-                raw = raw / 100
-
-            # clamp
-            raw = max(0, min(raw, 1))
-            normalized_scores.append(raw)
-
-        if normalized_scores:
-            avg_fit = round(sum(normalized_scores) / len(normalized_scores) * 100, 1)
-
-        proposal_count = len([o for o in opps if o["stage"] == "Proposal"])
-
-    # FINAL RESPONSE
-    return jsonify({
-        "active_opportunities": total,
-        "avg_fit_score": avg_fit,
-        "proposal_stage_count": proposal_count
-    })
-
-
-
-
-
-@app.route("/api/opportunities")
-@login_required
-def api_opportunities():
-    industry = request.args.get("industry")
-    stage = request.args.get("stage")
-
-    clauses = []
-    params = []
-
-    if industry and industry != "":
-        clauses.append("industry=?")
-        params.append(industry)
-
-    if stage and stage != "":
-        clauses.append("stage=?")
-        params.append(stage)
-
-    query = "SELECT * FROM opportunities"
-    if clauses:
-        query += " WHERE " + " AND ".join(clauses)
-
-    opps_raw = query_all(query, tuple(params))
-    results = []
-
-    for opp in opps_raw:
-        latest_score_row = query_one("""
-            SELECT fit_score 
-            FROM recommendations 
-            WHERE opportunity_id = ?
-            ORDER BY created_at DESC
-            LIMIT 1
-        """, (opp["id"],))
-
-        score = 0
-        if latest_score_row and latest_score_row.get("fit_score") is not None:
-            score = float(latest_score_row["fit_score"])
-
-            # Convert values >1 into normalized
-            if score > 1:
-                score = score / 100
-
-            score = max(0, min(score, 1))
-            score = round(score * 100)
-
-        opp["fit_score"] = score
-
-        results.append(opp)
-
-    return jsonify(results)
-
-
-@app.route("/api/opportunities/<int:opp_id>")
-@login_required
-def api_opportunity_detail(opp_id):
-    data = query_one("SELECT * FROM opportunities WHERE id = ?", (opp_id,))
-    if not data:
-        return jsonify({"error": "not found"}), 404
-
-    # Read last computed score from recommendations table
-    last = query_one("""
-        SELECT fit_score FROM recommendations
-        WHERE opportunity_id = ?
-        ORDER BY created_at DESC LIMIT 1
-    """, (opp_id,))
-
-    if last and last.get("fit_score") is not None:
-        score_val = float(last["fit_score"])
-
-        if score_val > 1:
-            score_val = score_val / 100
-
-        score_val = score_val * 100
-        score_val = max(0, min(score_val, 100))
-
-        data["fit_score"] = round(score_val, 1)
-    else:
-        data["fit_score"] = 0
-
-    return jsonify(data)
 
 
 
@@ -448,12 +287,6 @@ def download_gap_report():
     return send_file(pdf_path, as_attachment=True)
 
 
-@app.route("/upload_case")
-@login_required
-def upload_case_page():
-    return render_template("upload_case.html")
-
-
 # -------- CASE STUDIES (RAG + DB) --------
 
 @app.route("/api/case_studies")
@@ -611,27 +444,6 @@ def uploaded_file(filename):
     upload_path = os.path.join(os.getcwd(), "uploads")
     return send_from_directory(upload_path, filename)
 
-@app.route("/register", methods=["GET", "POST"])
-def register():
-    if request.method == "GET":
-        return render_template("register.html")
-
-    username = request.form.get("username")
-    password = request.form.get("password")
-    role = request.form.get("role")  # admin/user
-
-    # Check user already exists
-    existing = query_one("SELECT * FROM users WHERE username=?", (username,))
-    if existing:
-        return render_template("register.html", error="Username already exists")
-
-    # Save user
-    execute(
-        "INSERT INTO users(username, password, role) VALUES (?, ?, ?)",
-        (username, generate_password_hash(password), role)
-    )
-
-    return redirect(url_for("login"))
 @app.post("/api/chat")
 @login_required
 def chatbot_api():

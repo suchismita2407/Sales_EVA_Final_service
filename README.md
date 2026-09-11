@@ -38,11 +38,18 @@ docker build -t sales-eva .
 docker run --env-file .env -p 5000:5000 sales-eva
 ```
 
+Or use the private-volume Compose setup:
+
+```powershell
+docker compose up --build
+```
+
 `GET /health` checks application and SQLite availability and returns HTTP 503 when the database is unavailable.
 
 ## Architecture
 
 - `app.py` exposes the Flask pages and JSON API routes.
+- `blueprints/auth.py`, `blueprints/pages.py`, and `blueprints/api.py` isolate authentication, page, and read-only API routing.
 - `services/rag_service.py` retrieves offerings and asks the LLM to rank matches or analyze gaps.
 - `db.py` owns SQLite schema initialization and parameterized query helpers.
 - `vector_store.py` owns the ChromaDB collections used by retrieval.
