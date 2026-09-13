@@ -15,11 +15,12 @@ class Config:
     SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "false").lower() == "true"
     TESTING = os.getenv("TESTING", "false").lower() == "true"
 
-    # LLM / embeddings config (adapt to TCS GenAI Lab etc.)
+    # Ollama exposes an OpenAI-compatible API at http://localhost:11434/v1.
+    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").lower()
     LLM_API_KEY = os.getenv("LLM_API_KEY")
-    LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://genailab.tcs.in")
-    LLM_MODEL = os.getenv("LLM_MODEL", "azure_ai/genailab-maas-DeepSeek-V3-0324")
-    EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "azure/genailab-maas-text-embedding-3-large")
+    LLM_BASE_URL = os.getenv("LLM_BASE_URL", "http://localhost:11434/v1")
+    LLM_MODEL = os.getenv("LLM_MODEL", "llama3.2:3b")
+    EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
 
     # Chroma config
     CHROMA_DIR = os.path.join(BASE_DIR, "chroma_data")

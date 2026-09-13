@@ -21,6 +21,18 @@ python -m pip install -r requirements.lock
 
 Set `SECRET_KEY`, `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`, and `EMBEDDING_MODEL` in `.env`. Langfuse variables are optional. Never commit `.env` or provider keys.
 
+### Ollama local setup
+
+Install Ollama for Windows from [ollama.com/download](https://ollama.com/download/windows), then open PowerShell and download the models:
+
+```powershell
+ollama pull llama3.2:3b
+ollama pull nomic-embed-text
+ollama serve
+```
+
+Keep `ollama serve` running. The default `.env.example` configuration uses Ollama locally and does not require an API key. If you prefer another Ollama model, set `LLM_MODEL` to a model you have pulled. The embedding model must support Ollama's `/v1/embeddings` endpoint.
+
 The development seed creates an `admin` user with password `admin123`. Change or remove this account before deploying.
 
 ## Run
@@ -43,6 +55,8 @@ Or use the private-volume Compose setup:
 ```powershell
 docker compose up --build
 ```
+
+Compose routes the container to Ollama running on the host through `host.docker.internal`. Start Ollama first with `ollama serve` and pull the models before starting Compose.
 
 `GET /health` checks application and SQLite availability and returns HTTP 503 when the database is unavailable.
 

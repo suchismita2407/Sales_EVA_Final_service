@@ -4,6 +4,9 @@ services:
     env_file: .env
     environment:
       DATABASE_PATH: /app/data/sales_eva.db
+      LLM_BASE_URL: http://host.docker.internal:11434/v1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "5000:5000"
     volumes:

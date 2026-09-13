@@ -28,12 +28,12 @@ client = httpx.Client()
 def get_llm():
     global _llm
     if _llm is None:
-        if not Config.LLM_API_KEY:
+        if not Config.LLM_API_KEY and Config.LLM_PROVIDER != "ollama":
             raise RuntimeError("LLM_API_KEY is required for LLM features")
         _llm = ChatOpenAI(
             base_url=Config.LLM_BASE_URL,
             model=Config.LLM_MODEL,
-            api_key=Config.LLM_API_KEY,
+            api_key=Config.LLM_API_KEY or "ollama",
             temperature=0.1,
             http_client=client,
         )
@@ -80,7 +80,7 @@ def get_embeddings():
 
         _embeddings = OpenAIEmbeddings(
             base_url=Config.LLM_BASE_URL,
-            api_key=Config.LLM_API_KEY,
+            api_key=Config.LLM_API_KEY or "ollama",
             model=Config.EMBEDDING_MODEL,
             http_client=client,
             request_timeout=60,
