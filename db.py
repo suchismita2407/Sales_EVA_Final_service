@@ -12,6 +12,7 @@ def get_connection():
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
+
 def init_db():
     conn = get_connection()
     cur = conn.cursor()
@@ -49,7 +50,6 @@ def init_db():
         link TEXT
     )
     """)
-
 
     # Opportunities
     cur.execute("""
@@ -96,7 +96,7 @@ def init_db():
         if password and not password.startswith(("scrypt:", "pbkdf2:", "argon2:")):
             cur.execute(
                 "UPDATE users SET password=? WHERE id=?",
-                (generate_password_hash(password), user_id)
+                (generate_password_hash(password), user_id),
             )
 
     # Seed a default user and some dummy data if empty
@@ -104,11 +104,12 @@ def init_db():
     if cur.fetchone()[0] == 0:
         cur.execute(
             "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-            ("admin", generate_password_hash("admin123"), "admin")
+            ("admin", generate_password_hash("admin123"), "admin"),
         )
 
     conn.commit()
     conn.close()
+
 
 def query_all(sql: str, params: tuple = ()) -> list[dict[str, Any]]:
     conn = get_connection()
@@ -118,6 +119,7 @@ def query_all(sql: str, params: tuple = ()) -> list[dict[str, Any]]:
     conn.close()
     return rows
 
+
 def query_one(sql: str, params: tuple = ()) -> dict[str, Any] | None:
     conn = get_connection()
     cur = conn.cursor()
@@ -125,6 +127,7 @@ def query_one(sql: str, params: tuple = ()) -> dict[str, Any] | None:
     row = cur.fetchone()
     conn.close()
     return dict(row) if row else None
+
 
 def execute(sql: str, params: tuple = ()) -> int:
     conn = get_connection()

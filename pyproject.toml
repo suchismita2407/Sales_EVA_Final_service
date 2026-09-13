@@ -1,0 +1,12 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+include = ["*.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "SIM", "B", "RUF"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"

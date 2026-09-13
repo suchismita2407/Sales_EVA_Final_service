@@ -19,6 +19,7 @@ from blueprints.auth import auth_bp, login_required
 from blueprints.pages import pages_bp
 from config import Config
 from db import execute, init_db, query_all, query_one
+from errors import AppError, DatabaseUnavailableError
 from services.doc_extractor import extract_text_from_file
 from services.input_validator import contains_prompt_injection, contains_sensitive_data
 from services.llm_service import get_embeddings
@@ -38,6 +39,7 @@ app.register_blueprint(auth_bp)
 app.register_blueprint(api_bp)
 app.register_blueprint(pages_bp)
 app.logger.setLevel(logging.INFO)
+request_count = 0
 
 
 class JsonFormatter(logging.Formatter):
@@ -67,6 +69,8 @@ for handler in app.logger.handlers:
 
 @app.before_request
 def assign_request_id():
+    global request_count
+    request_count += 1
     request.request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
 
 
@@ -74,6 +78,7 @@ def assign_request_id():
 def add_request_id(response):
     response.headers["X-Request-ID"] = request.request_id
     return response
+
 
 UPLOAD_DIR = os.path.abspath("uploads")
 
@@ -91,22 +96,33 @@ def request_too_large(_error):
     return jsonify({"error": "Uploaded content exceeds the size limit"}), 413
 
 
+@app.errorhandler(AppError)
+def handle_app_error(error):
+    app.logger.warning("Application request failed", extra={"error_code": error.error_code})
+    return jsonify({"error": error.error_code, "message": str(error)}), error.status_code
+
+
 @app.get("/health")
 def health():
     try:
         query_one("SELECT 1")
         return jsonify({"status": "ok", "database": "ok"})
-    except Exception:
+    except sqlite3.Error as error:
         app.logger.exception("Health check failed")
-        return jsonify({"status": "degraded", "database": "unavailable"}), 503
+        raise DatabaseUnavailableError("Database is unavailable") from error
+
+
+@app.get("/metrics")
+def metrics():
+    return jsonify({"requests_total": request_count})
 
 
 with app.app_context():
     init_db()
 
 
-
 # ====================== CREATE OFFERING FIXED =========================
+
 
 @app.route("/api/offerings", methods=["GET", "POST"])
 @login_required
@@ -122,10 +138,11 @@ def api_offerings():
 
     offering_id = execute(
         "INSERT INTO offerings (name, industry, description) VALUES (?, ?, ?)",
-        (name, industry, description)
+        (name, industry, description),
     )
 
     return jsonify({"status": "ok", "id": offering_id})
+
 
 # ======================================================================
 
@@ -149,7 +166,7 @@ def api_upload_document():
     if not extracted_text:
         return jsonify({"error": "Unable to read document"}), 400
 
-    chunks = [extracted_text[i:i+800] for i in range(0, len(extracted_text), 800)]
+    chunks = [extracted_text[i : i + 800] for i in range(0, len(extracted_text), 800)]
     emb = get_embeddings()
 
     for idx, chunk in enumerate(chunks):
@@ -160,7 +177,7 @@ def api_upload_document():
                 ids=[f"file_{ref_id}_{idx}"],
                 embeddings=[vec],
                 documents=[chunk],
-                metadatas=[{"offering_id": ref_id}]
+                metadatas=[{"offering_id": ref_id}],
             )
 
     execute("UPDATE offerings SET artifact_links=? WHERE id=?", (path, ref_id))
@@ -183,7 +200,15 @@ def api_create_opportunity():
     data = request.get_json(silent=True) or {}
 
     # Validate required fields
-    required_fields = ["name", "client", "industry", "value", "stage", "description", "requirements"]
+    required_fields = [
+        "name",
+        "client",
+        "industry",
+        "value",
+        "stage",
+        "description",
+        "requirements",
+    ]
     for f in required_fields:
         if not data.get(f):
             return jsonify({"error": f"❌ '{f}' is required"}), 400
@@ -192,21 +217,24 @@ def api_create_opportunity():
     for label, field_value in data.items():
         if isinstance(field_value, str):
             if contains_sensitive_data(field_value):
-                return jsonify({
-                    "error": f"⚠️ Personal/Confidential information is not allowed in '{label}'."
-                }), 400
+                return jsonify(
+                    {"error": f"⚠️ Personal/Confidential information is not allowed in '{label}'."}
+                ), 400
 
             if contains_prompt_injection(field_value):
-                return jsonify({
-                    "error": f"⚠️ Your entry in '{label}' contains unsafe instructions."
-                }), 400
+                return jsonify(
+                    {"error": f"⚠️ Your entry in '{label}' contains unsafe instructions."}
+                ), 400
 
     # ✔ Insert record safely
     try:
-        opp_id = execute("""
-            INSERT INTO opportunities(name, client, industry, value, stage, description, requirements)
-            VALUES(?,?,?,?,?,?,?)
-            """,
+        opp_id = execute(
+            """
+                INSERT INTO opportunities(
+                    name, client, industry, value, stage, description, requirements
+                )
+                VALUES(?,?,?,?,?,?,?)
+                """,
             (
                 data["name"],
                 data["client"],
@@ -214,8 +242,8 @@ def api_create_opportunity():
                 data["value"],
                 data["stage"],
                 data["description"],
-                data["requirements"]
-            )
+                data["requirements"],
+            ),
         )
     except sqlite3.Error:
         app.logger.exception("Opportunity creation failed")
@@ -240,6 +268,7 @@ def api_match_solutions():
     matches = match_solutions_for_opportunity(opp_id)
     return jsonify(matches), 200
 
+
 @app.post("/api/save_feedback")
 @login_required
 def api_save_feedback():
@@ -253,10 +282,13 @@ def api_save_feedback():
     if not opp or not off:
         return jsonify({"error": "missing opportunity or offering"}), 400
 
-    execute("""
+    execute(
+        """
         INSERT INTO feedback(opportunity_id, offering_id, rating, comments)
         VALUES (?,?,?,?)
-    """, (opp, off, rating, comments))
+    """,
+        (opp, off, rating, comments),
+    )
 
     return jsonify({"status": "saved"})
 
@@ -289,6 +321,7 @@ def download_gap_report():
 
 # -------- CASE STUDIES (RAG + DB) --------
 
+
 @app.route("/api/case_studies")
 @login_required
 def api_case_studies():
@@ -305,10 +338,7 @@ def api_case_studies():
     query_vec = emb.embed_query(f"case study for {industry} industry")
 
     # Retrieve nearest documents
-    res = case_studies_col.query(
-        query_embeddings=[query_vec],
-        n_results=5
-    )
+    res = case_studies_col.query(query_embeddings=[query_vec], n_results=5)
 
     results = []
 
@@ -330,13 +360,15 @@ def api_case_studies():
         benefit = row.get("benefit") or "Not Available"
         link = row.get("link") or ""
 
-        results.append({
-            "id": row["id"],
-            "title": row["title"],
-            "industry": row["industry"],
-            "key_benefit": benefit,
-            "file_link": os.path.basename(link) if link else ""
-        })
+        results.append(
+            {
+                "id": row["id"],
+                "title": row["title"],
+                "industry": row["industry"],
+                "key_benefit": benefit,
+                "file_link": os.path.basename(link) if link else "",
+            }
+        )
 
     return jsonify(results), 200
 
@@ -365,6 +397,7 @@ def api_upload_case():
     app.logger.info("Case study text extracted", extra={"text_length": len(extracted_text)})
 
     from services.llm_service import get_llm
+
     llm = get_llm()
 
     prompt = f"""
@@ -399,20 +432,23 @@ Extract data strictly in this JSON format:
         data = {
             "title": file.filename,
             "industry": "General",
-            "key_benefit": "Insights Not Extracted"
+            "key_benefit": "Insights Not Extracted",
         }
 
     # Build relative path for frontend usage /uploads/<file>
     relative_path = os.path.join("uploads", os.path.basename(file_path))
-    case_id = execute("""
+    case_id = execute(
+        """
         INSERT INTO case_studies(title, industry, benefit, link)
         VALUES (?,?,?,?)
-    """, (
-        data.get("title", file.filename),
-        data.get("industry", "General"),
-        data.get("key_benefit", "Insights Not Extracted"),
-        relative_path
-    ))
+    """,
+        (
+            data.get("title", file.filename),
+            data.get("industry", "General"),
+            data.get("key_benefit", "Insights Not Extracted"),
+            relative_path,
+        ),
+    )
 
     # Insert into vector DB
     from services.llm_service import get_embeddings
@@ -425,11 +461,13 @@ Extract data strictly in this JSON format:
         ids=[f"case-{case_id}"],
         embeddings=[vec],
         documents=[extracted_text],
-        metadatas=[{
-            "id": case_id,
-            "title": data.get("title", file.filename),
-            "industry": data.get("industry", "General")
-        }]
+        metadatas=[
+            {
+                "id": case_id,
+                "title": data.get("title", file.filename),
+                "industry": data.get("industry", "General"),
+            }
+        ],
     )
 
     app.logger.info("Case study processing complete", extra={"case_id": case_id})
@@ -439,10 +477,12 @@ Extract data strictly in this JSON format:
 
 # -------- SERVE UPLOADED FILES --------
 
-@app.route('/uploads/<path:filename>')
+
+@app.route("/uploads/<path:filename>")
 def uploaded_file(filename):
     upload_path = os.path.join(os.getcwd(), "uploads")
     return send_from_directory(upload_path, filename)
+
 
 @app.post("/api/chat")
 @login_required
@@ -456,39 +496,65 @@ def chatbot_api():
     data = request.get_json(force=True)
     user_query = (data.get("query") or "").strip().lower()
 
-    
     if not user_query:
         return jsonify({"answer": "Please type something."})
 
     # 🚫 Block Personal Data Leakage
     if contains_sensitive_data(user_query):
-        return jsonify({
-            "answer": "<p>⚠️ Please do not enter personal or confidential information such as phone numbers, email, Aadhaar, PAN etc.</p>",
-            "format": "html"
-        })
+        return jsonify(
+            {
+                "answer": "<p>Please do not enter personal or confidential information "
+                "such as phone numbers, email, Aadhaar, PAN etc.</p>",
+                "format": "html",
+            }
+        )
 
     # 🚫 Block Prompt Injection attempts
     if contains_prompt_injection(user_query):
-        return jsonify({
-            "answer": "<p>⚠️ Your query contains unsafe instructions. I cannot proceed.</p>",
-            "format": "html"
-        })
+        return jsonify(
+            {
+                "answer": "<p>Your query contains unsafe instructions. I cannot proceed.</p>",
+                "format": "html",
+            }
+        )
 
     # 1) 🔍 Detect casual greeting
     smalltalk_keywords = [
-        "hi", "hello", "hey", "how are you", "good morning", "good evening",
-        "good afternoon", "who are you", "what is your name"
+        "hi",
+        "hello",
+        "hey",
+        "how are you",
+        "good morning",
+        "good evening",
+        "good afternoon",
+        "who are you",
+        "what is your name",
     ]
     if any(user_query.startswith(k) for k in smalltalk_keywords):
-        return jsonify({"answer": "Hello! How can I support you with opportunities, offerings or case studies?"})
+        return jsonify(
+            {
+                "answer": "Hello! How can I support you with opportunities, "
+                "offerings or case studies?"
+            }
+        )
 
     # 2) Generic questions filter
     general_questions = [
-        "what is ai", "what is cloud", "define", "explain",
-        "difference between", "compare", "what do you think"
+        "what is ai",
+        "what is cloud",
+        "define",
+        "explain",
+        "difference between",
+        "compare",
+        "what do you think",
     ]
     if any(q in user_query for q in general_questions):
-        return jsonify({"answer": "I can answer about offerings, case studies and opportunities. Can you ask something related to offerings, solution fit, industry trends, client needs or opportunities?"})
+        return jsonify(
+            {
+                "answer": "I can answer about offerings, case studies and opportunities. "
+                "Ask about solution fit, industry trends, client needs, or opportunities."
+            }
+        )
 
     emb = get_embeddings()
 
@@ -519,11 +585,10 @@ Respond ONLY using HTML format.
 <div class="eva-block">
 
 <h3>🔍 Summary</h3>
-<p>2–3 sentences answer</p>
+<p>2-3 sentences answer</p>
 
 <h3>🧩 Recommended Offerings</h3>
 <ul>
-- Brief offering names with relevant context.
 </ul>
 
 <h3>📚 Relevant Case Studies</h3>
@@ -533,7 +598,6 @@ Respond ONLY using HTML format.
 
 <h3>💼 Business Impact</h3>
 <ul>
-- Value drivers
 </ul>
 
 </div>
@@ -550,10 +614,6 @@ You are EVA, enterprise assistant.
 No relevant KB found.
 
 Ask user to mention:
-- Opportunity name  
-- Industry  
-- Client  
-- Offering  
 
 User Query:
 {user_query}
@@ -563,7 +623,6 @@ User Query:
     answer = tracked_llm_call(prompt)
 
     return jsonify({"answer": answer, "format": "html"})
-
 
 
 if __name__ == "__main__":

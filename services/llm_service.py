@@ -11,15 +11,19 @@ logger = logging.getLogger(__name__)
 try:
     from langfuse import observe
 except (ImportError, RuntimeError, TypeError):
+
     def observe(**_kwargs):
         def decorator(function):
             return function
+
         return decorator
+
 
 _llm = None
 _embeddings = None
 
 client = httpx.Client()
+
 
 def get_llm():
     global _llm
@@ -31,9 +35,10 @@ def get_llm():
             model=Config.LLM_MODEL,
             api_key=Config.LLM_API_KEY,
             temperature=0.1,
-            http_client=client
+            http_client=client,
         )
     return _llm
+
 
 @observe(name="eva-llm-response", as_type="generation")
 def tracked_llm_call(prompt: str):
@@ -48,17 +53,12 @@ def tracked_llm_call(prompt: str):
     return answer
 
 
-
-
 def get_embeddings():
     global _embeddings
     if _embeddings is None:
-
         # Patch: Use local tokenizer file instead of downloading from Azure Blob
         local_tokenizer_path = os.path.join(
-            Config.BASE_DIR,
-            "tokenizer_files",
-            "cl100k_base.tiktoken"
+            Config.BASE_DIR, "tokenizer_files", "cl100k_base.tiktoken"
         )
 
         if os.path.exists(local_tokenizer_path):

@@ -1,5 +1,8 @@
 from types import SimpleNamespace
 
+import pytest
+
+from errors import LLMParseError
 from services import rag_service
 
 
@@ -35,23 +38,27 @@ def test_match_solutions_uses_mocked_services(monkeypatch):
         ),
     )
     monkeypatch.setattr(rag_service, "get_embeddings", lambda: FakeEmbeddings())
-    monkeypatch.setattr(rag_service, "get_llm", lambda: FakeLlm(
-        '[{"offering_id": 7, "fit_score": 0.9, "explanation": "Good fit"}]'
-    ))
+    monkeypatch.setattr(
+        rag_service,
+        "get_llm",
+        lambda: FakeLlm('[{"offering_id": 7, "fit_score": 0.9, "explanation": "Good fit"}]'),
+    )
     monkeypatch.setattr(rag_service, "offerings_col", FakeCollection())
     monkeypatch.setattr(rag_service, "execute", lambda *args: 1)
 
     result = rag_service.match_solutions_for_opportunity(1)
 
-    assert result == [{
-        "offering_id": 7,
-        "offering_name": "Insights",
-        "score": 90,
-        "reason": "Good fit",
-    }]
+    assert result == [
+        {
+            "offering_id": 7,
+            "offering_name": "Insights",
+            "score": 90,
+            "reason": "Good fit",
+        }
+    ]
 
 
-def test_analyze_gaps_falls_back_on_invalid_llm_json(monkeypatch):
+def test_analyze_gaps_raises_typed_error_on_invalid_llm_json(monkeypatch):
     monkeypatch.setattr(
         rag_service,
         "query_one",
@@ -59,8 +66,5 @@ def test_analyze_gaps_falls_back_on_invalid_llm_json(monkeypatch):
     )
     monkeypatch.setattr(rag_service, "get_llm", lambda: FakeLlm("not-json"))
 
-    result = rag_service.analyze_gaps(1, 2)
-
-    assert result["covered"] == []
-    assert result["partial"] == []
-    assert "fallback" in result["missing"][0]
+    with pytest.raises(LLMParseError, match="invalid"):
+        rag_service.analyze_gaps(1, 2)

@@ -12,6 +12,7 @@ MAX_FILENAME_LENGTH = 255
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+
 def save_uploaded_file(file):
     filename = secure_filename((file.filename or "").strip())
     extension = os.path.splitext(filename)[1].lower()

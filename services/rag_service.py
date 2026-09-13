@@ -1,8 +1,13 @@
 import json
+import logging
+import re
 
 from db import execute, query_one
+from errors import LLMParseError
 from services.llm_service import get_embeddings, get_llm
 from vector_store import offerings_col, opportunities_col
+
+logger = logging.getLogger(__name__)
 
 
 def embed_text(text: str) -> list[float]:
@@ -11,26 +16,29 @@ def embed_text(text: str) -> list[float]:
 
 
 def index_offering(off):
-    text = f"{off['name']} {off.get('industry','')} {off.get('description','')}"
+    text = f"{off['name']} {off.get('industry', '')} {off.get('description', '')}"
     vec = embed_text(text)
 
     offerings_col.add(
         ids=[f"off-{off['id']}"],
         embeddings=[vec],
         documents=[text],
-        metadatas=[{"offering_id": off["id"]}]
+        metadatas=[{"offering_id": off["id"]}],
     )
 
 
 def index_opportunity(opp):
-    text = f"{opp['name']} {opp.get('industry','')} {opp.get('description','')} {opp.get('requirements','')}"
+    text = (
+        f"{opp['name']} {opp.get('industry', '')} {opp.get('description', '')} "
+        f"{opp.get('requirements', '')}"
+    )
     vec = embed_text(text)
 
     opportunities_col.add(
         ids=[f"opp-{opp['id']}"],
         embeddings=[vec],
         documents=[text],
-        metadatas=[{"opportunity_id": opp["id"]}]
+        metadatas=[{"opportunity_id": opp["id"]}],
     )
 
 
@@ -46,10 +54,12 @@ def match_solutions_for_opportunity(opp_id: int):
 
     candidates = []
     for idx, meta in enumerate(res["metadatas"][0]):
-        candidates.append({
-            "offering_id": meta["offering_id"],
-            "fit_score": float(res["distances"][0][idx])  # similarity score
-        })
+        candidates.append(
+            {
+                "offering_id": meta["offering_id"],
+                "fit_score": float(res["distances"][0][idx]),  # similarity score
+            }
+        )
 
     llm = get_llm()
 
@@ -67,7 +77,7 @@ Rank these candidates for the opportunity:
 {json.dumps(candidates)}
 
 Opportunity Details:
-{opp['description']}
+{opp["description"]}
 """
 
     reply = llm.invoke(prompt)
@@ -76,27 +86,30 @@ Opportunity Details:
     # Try direct JSON parse
     try:
         ranked = json.loads(raw)
-    except (json.JSONDecodeError, TypeError):
-        # fallback
-        ranked = [{"offering_id": c["offering_id"],
-                   "fit_score": c["fit_score"],
-                   "explanation": "fallback reasoning due to parsing failure"} for c in candidates]
+    except (json.JSONDecodeError, TypeError) as error:
+        logger.exception(
+            "LLM ranking response could not be parsed", extra={"opportunity_id": opp_id}
+        )
+        raise LLMParseError("LLM ranking response was invalid") from error
 
     enriched = []
     for item in ranked:
         off_row = query_one("SELECT name FROM offerings WHERE id=?", (item["offering_id"],))
         percentage_score = int(item["fit_score"] * 100)
 
-        enriched.append({
-            "offering_id": item["offering_id"],
-            "offering_name": off_row["name"] if off_row else "Unknown",
-            "score": percentage_score,
-            "reason": item.get("explanation", "")
-        })
+        enriched.append(
+            {
+                "offering_id": item["offering_id"],
+                "offering_name": off_row["name"] if off_row else "Unknown",
+                "score": percentage_score,
+                "reason": item.get("explanation", ""),
+            }
+        )
 
         execute(
-            "INSERT INTO recommendations (opportunity_id, offering_id, fit_score, explanation) VALUES (?,?,?,?)",
-            (opp_id, item["offering_id"], item["fit_score"], item["explanation"])
+            "INSERT INTO recommendations "
+            "(opportunity_id, offering_id, fit_score, explanation) VALUES (?,?,?,?)",
+            (opp_id, item["offering_id"], item["fit_score"], item["explanation"]),
         )
 
     return enriched
@@ -126,11 +139,11 @@ Use exact structure:
 }}
 
 Opportunity:
-Description: {opp.get('description','')}
-Requirements: {opp.get('requirements','')}
+Description: {opp.get("description", "")}
+Requirements: {opp.get("requirements", "")}
 
 Offering:
-Description: {off.get('description','')}
+Description: {off.get("description", "")}
 """
 
     reply = llm.invoke(prompt)
@@ -139,8 +152,6 @@ Description: {off.get('description','')}
     # Clean formatting errors from LLM
     raw = raw.replace("```json", "").replace("```", "").strip()
 
-    import re
-
     # Extract JSON reliably from anywhere
     try:
         match = re.search(r"\{[\s\S]*\}", raw)
@@ -148,12 +159,9 @@ Description: {off.get('description','')}
             result = json.loads(match.group(0))
         else:
             raise ValueError("JSON not found")
-    except (json.JSONDecodeError, ValueError, TypeError):
-        result = {
-            "covered": [],
-            "partial": [],
-            "missing": ["LLM parsing failed – fallback applied"]
-        }
+    except (json.JSONDecodeError, ValueError, TypeError) as error:
+        logger.exception("LLM gap response could not be parsed", extra={"opportunity_id": opp_id})
+        raise LLMParseError("LLM gap-analysis response was invalid") from error
 
     # Guarantee keys exist
     for key in ["covered", "partial", "missing"]:

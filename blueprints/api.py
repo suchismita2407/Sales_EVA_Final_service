@@ -16,14 +16,17 @@ def dashboard_stats():
         WHERE fit_score IS NOT NULL
     """)
     normalized_scores = [normalize_score(row["fit_score"]) for row in scores]
-    return jsonify({
-        "active_opportunities": len(opportunities),
-        "avg_fit_score": round(sum(normalized_scores) / len(normalized_scores) * 100, 1)
-        if normalized_scores else 0.0,
-        "proposal_stage_count": sum(
-            opportunity["stage"] == "Proposal" for opportunity in opportunities
-        ),
-    })
+    return jsonify(
+        {
+            "active_opportunities": len(opportunities),
+            "avg_fit_score": round(sum(normalized_scores) / len(normalized_scores) * 100, 1)
+            if normalized_scores
+            else 0.0,
+            "proposal_stage_count": sum(
+                opportunity["stage"] == "Proposal" for opportunity in opportunities
+            ),
+        }
+    )
 
 
 @api_bp.get("/opportunities")
@@ -43,11 +46,14 @@ def opportunities():
 
     results = []
     for opportunity in query_all(query, tuple(params)):
-        latest = query_one("""
+        latest = query_one(
+            """
             SELECT fit_score FROM recommendations
             WHERE opportunity_id = ?
             ORDER BY created_at DESC LIMIT 1
-        """, (opportunity["id"],))
+        """,
+            (opportunity["id"],),
+        )
         opportunity["fit_score"] = percentage_score(latest["fit_score"]) if latest else 0
         results.append(opportunity)
     return jsonify(results)
@@ -60,10 +66,13 @@ def opportunity_detail(opp_id):
     if not opportunity:
         return jsonify({"error": "not found"}), 404
 
-    latest = query_one("""
+    latest = query_one(
+        """
         SELECT fit_score FROM recommendations
         WHERE opportunity_id = ?
         ORDER BY created_at DESC LIMIT 1
-    """, (opp_id,))
+    """,
+        (opp_id,),
+    )
     opportunity["fit_score"] = percentage_score(latest["fit_score"], digits=1) if latest else 0
     return jsonify(opportunity)

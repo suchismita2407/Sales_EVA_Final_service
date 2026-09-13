@@ -9,7 +9,7 @@ def extract_text_from_file(filepath):
     elif ext in [".doc", ".docx"]:
         return extract_doc(filepath)
     elif ext in [".txt"]:
-        with open(filepath, "r", encoding="utf-8") as file:
+        with open(filepath, encoding="utf-8") as file:
             return file.read()
     else:
         return None
@@ -17,6 +17,7 @@ def extract_text_from_file(filepath):
 
 def extract_pdf(filepath):
     import pypdf
+
     with open(filepath, "rb") as file:
         reader = pypdf.PdfReader(file)
         text = ""
@@ -27,5 +28,6 @@ def extract_pdf(filepath):
 
 def extract_doc(filepath):
     import docx
+
     doc = docx.Document(filepath)
     return "\n".join(p.text for p in doc.paragraphs)

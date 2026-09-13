@@ -10,11 +10,7 @@ def contains_sensitive_data(text: str) -> bool:
         r"\b\d{16}\b",  # card numbers
     ]
 
-    for pattern in patterns:
-        if re.search(pattern, text):
-            return True
-
-    return False
+    return any(re.search(pattern, text) for pattern in patterns)
 
 
 def contains_prompt_injection(text: str) -> bool:
@@ -29,12 +25,8 @@ def contains_prompt_injection(text: str) -> bool:
         "delete database",
         "run sql",
         "execute command",
-        "use system role"
+        "use system role",
     ]
 
     text_low = text.lower()
-    for pattern in injection_patterns:
-        if pattern in text_low:
-            return True
-
-    return False
+    return any(pattern in text_low for pattern in injection_patterns)

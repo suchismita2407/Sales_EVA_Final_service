@@ -17,7 +17,7 @@ jobs:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.lock') }}
       - name: Install dependencies
-        run: test -f requirements.lock && python -m pip install -r requirements.lock
+        run: python -m pip install -r requirements.lock && python -m pip check
       - name: Compile Python modules
         run: python -m compileall -q .
       - name: Run tests with coverage
@@ -35,11 +35,13 @@ jobs:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.lock') }}
       - name: Install dependencies
-        run: python -m pip install -r requirements.lock
+        run: python -m pip install -r requirements.lock && python -m pip check
       - name: Install quality tools
         run: python -m pip install "ruff>=0.8,<1" "pip-audit>=2.7,<3"
       - name: Lint
         run: ruff check app.py blueprints config.py db.py services scripts tests
+      - name: Format check
+        run: ruff format --check app.py blueprints config.py db.py errors.py services scripts tests
 
   audit:
     runs-on: ubuntu-latest
@@ -53,7 +55,7 @@ jobs:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements.lock') }}
       - name: Install dependencies
-        run: test -f requirements.lock && python -m pip install -r requirements.lock
+        run: python -m pip install -r requirements.lock && python -m pip check
       - name: Install audit tool
         run: python -m pip install "pip-audit>=2.7,<3"
       - name: Audit dependencies

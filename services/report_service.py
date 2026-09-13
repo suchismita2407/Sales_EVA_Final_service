@@ -24,14 +24,14 @@ def generate_gap_pdf(opp_id: int, offering_id: int):
     covering:
 
     Opportunity:
-    {opp['description']}
+    {opp["description"]}
 
     Offering:
-    {off['description']}
+    {off["description"]}
 
-    Covered points: {json.dumps(gaps['covered'])}
-    Partial coverage: {json.dumps(gaps['partial'])}
-    Missing areas: {json.dumps(gaps['missing'])}
+    Covered points: {json.dumps(gaps["covered"])}
+    Partial coverage: {json.dumps(gaps["partial"])}
+    Missing areas: {json.dumps(gaps["missing"])}
 
     Focus on:
     - Scope alignment
@@ -50,39 +50,41 @@ def generate_gap_pdf(opp_id: int, offering_id: int):
 
     output_path = os.path.join(output_dir, f"GAP_REPORT_O{opp_id}_F{offering_id}.pdf")
 
-
     doc = SimpleDocTemplate(output_path, pagesize=A4)
     styles = getSampleStyleSheet()
     elements = []
 
-    elements.append(Paragraph("<b>GAP ANALYSIS REPORT</b>", styles['Title']))
+    elements.append(Paragraph("<b>GAP ANALYSIS REPORT</b>", styles["Title"]))
     elements.append(Spacer(1, 12))
 
-    elements.append(Paragraph(f"<b>Opportunity:</b> {opp['name']}", styles['Normal']))
-    elements.append(Paragraph(f"<b>Offering:</b> {off['name']}", styles['Normal']))
+    elements.append(Paragraph(f"<b>Opportunity:</b> {opp['name']}", styles["Normal"]))
+    elements.append(Paragraph(f"<b>Offering:</b> {off['name']}", styles["Normal"]))
     elements.append(Spacer(1, 12))
-
 
     table_data = [
-        ['Category', 'Details'],
-        ['Covered', "\n".join(gaps['covered']) or "None"],
-        ['Partial Coverage', "\n".join(gaps['partial']) or "None"],
-        ['Missing', "\n".join(gaps['missing']) or "None"],
+        ["Category", "Details"],
+        ["Covered", "\n".join(gaps["covered"]) or "None"],
+        ["Partial Coverage", "\n".join(gaps["partial"]) or "None"],
+        ["Missing", "\n".join(gaps["missing"]) or "None"],
     ]
 
     table = Table(table_data, colWidths=[100, 360])
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.gray),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('BOX', (0, 0), (-1, -1), 1, colors.black),
-        ('GRID', (0, 0), (-1, -1), 0.25, colors.grey),
-    ]))
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.gray),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("BOX", (0, 0), (-1, -1), 1, colors.black),
+                ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+            ]
+        )
+    )
 
     elements.append(table)
     elements.append(Spacer(1, 15))
 
-    elements.append(Paragraph("<b>Consultant Narrative</b>", styles['Heading2']))
-    elements.append(Paragraph(narrative.replace('\n', '<br/>'), styles['Normal']))
+    elements.append(Paragraph("<b>Consultant Narrative</b>", styles["Heading2"]))
+    elements.append(Paragraph(narrative.replace("\n", "<br/>"), styles["Normal"]))
 
     doc.build(elements)
 

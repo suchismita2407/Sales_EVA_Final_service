@@ -14,15 +14,21 @@ def test_generate_gap_pdf_writes_report(tmp_path, monkeypatch):
             else {"name": "Offering", "description": "Analytics platform"}
         ),
     )
-    monkeypatch.setattr(report_service, "analyze_gaps", lambda *_args: {
-        "covered": ["Reporting"],
-        "partial": [],
-        "missing": ["Migration"],
-    })
+    monkeypatch.setattr(
+        report_service,
+        "analyze_gaps",
+        lambda *_args: {
+            "covered": ["Reporting"],
+            "partial": [],
+            "missing": ["Migration"],
+        },
+    )
     monkeypatch.setattr(
         report_service,
         "get_llm",
-        lambda: SimpleNamespace(invoke=lambda _prompt: SimpleNamespace(content="- Recommend a pilot")),
+        lambda: SimpleNamespace(
+            invoke=lambda _prompt: SimpleNamespace(content="- Recommend a pilot")
+        ),
     )
 
     output_path = report_service.generate_gap_pdf(1, 2)
