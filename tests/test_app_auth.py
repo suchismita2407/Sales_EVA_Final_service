@@ -1,9 +1,10 @@
+import secrets
+
 import pytest
 
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    pytest.importorskip("flask")
     try:
         import app
     except (ImportError, RuntimeError, TypeError, AttributeError) as error:
@@ -13,7 +14,7 @@ def client(tmp_path, monkeypatch):
 
     monkeypatch.setattr(app.Config, "DATABASE_PATH", str(tmp_path / "app.db"))
     app.init_db()
-    app.app.config.update(TESTING=True, SECRET_KEY="test-secret")
+    app.app.config.update(TESTING=True, SECRET_KEY=secrets.token_urlsafe(32))
     return app.app.test_client()
 
 

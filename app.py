@@ -16,28 +16,30 @@ from flask import (
 
 from blueprints.api import api_bp
 from blueprints.auth import auth_bp, login_required
+from blueprints.offerings import offerings_bp
 from blueprints.pages import pages_bp
+from blueprints.uploads import uploads_bp
 from config import Config
-from db import execute, init_db, query_all, query_one
+from db import execute, init_db, query_one
 from errors import AppError, DatabaseUnavailableError
+from schemas import OpportunityCreate
 from services.doc_extractor import extract_text_from_file
 from services.input_validator import contains_prompt_injection, contains_sensitive_data
-from services.llm_service import get_embeddings
 from services.rag_service import (
     analyze_gaps,
-    index_offering,
     index_opportunity,
     match_solutions_for_opportunity,
 )
 from services.report_service import generate_gap_pdf
 from services.upload_service import save_uploaded_file
-from vector_store import offerings_col
 
 app = Flask(__name__)
 app.config.from_object(Config)
 app.register_blueprint(auth_bp)
 app.register_blueprint(api_bp)
+app.register_blueprint(offerings_bp)
 app.register_blueprint(pages_bp)
+app.register_blueprint(uploads_bp)
 app.logger.setLevel(logging.INFO)
 request_count = 0
 
@@ -121,74 +123,6 @@ with app.app_context():
     init_db()
 
 
-# ====================== CREATE OFFERING FIXED =========================
-
-
-@app.route("/api/offerings", methods=["GET", "POST"])
-@login_required
-def api_offerings():
-    if request.method == "GET":
-        data = query_all("SELECT * FROM offerings")
-        return jsonify(data)
-
-    # ---------- CREATE OFFERING ----------
-    name = request.form.get("name")
-    industry = request.form.get("industry")
-    description = request.form.get("description", "")
-
-    offering_id = execute(
-        "INSERT INTO offerings (name, industry, description) VALUES (?, ?, ?)",
-        (name, industry, description),
-    )
-
-    return jsonify({"status": "ok", "id": offering_id})
-
-
-# ======================================================================
-
-
-@app.route("/api/upload_document", methods=["POST"])
-@login_required
-def api_upload_document():
-    file = request.files.get("file")
-    ref_id = request.form.get("ref_id")
-    doc_type = request.form.get("type")
-
-    if not file:
-        return jsonify({"error": "file missing"}), 400
-
-    try:
-        path = save_uploaded_file(file)
-    except ValueError as error:
-        return jsonify({"error": str(error)}), 400
-    extracted_text = extract_text_from_file(path)
-
-    if not extracted_text:
-        return jsonify({"error": "Unable to read document"}), 400
-
-    chunks = [extracted_text[i : i + 800] for i in range(0, len(extracted_text), 800)]
-    emb = get_embeddings()
-
-    for idx, chunk in enumerate(chunks):
-        vec = emb.embed_query(chunk)
-
-        if doc_type == "offering":
-            offerings_col.add(
-                ids=[f"file_{ref_id}_{idx}"],
-                embeddings=[vec],
-                documents=[chunk],
-                metadatas=[{"offering_id": ref_id}],
-            )
-
-    execute("UPDATE offerings SET artifact_links=? WHERE id=?", (path, ref_id))
-
-    # re-index after upload
-    data = query_one("SELECT * FROM offerings WHERE id=?", (ref_id,))
-    index_offering(data)
-
-    return jsonify({"status": "uploaded"})
-
-
 @app.post("/api/create_opportunity")
 @login_required
 def api_create_opportunity():
@@ -198,35 +132,24 @@ def api_create_opportunity():
     )
 
     data = request.get_json(silent=True) or {}
+    try:
+        payload = OpportunityCreate.model_validate(data)
+    except ValueError as error:
+        return jsonify({"error": "invalid_opportunity", "details": str(error)}), 400
 
-    # Validate required fields
-    required_fields = [
-        "name",
-        "client",
-        "industry",
-        "value",
-        "stage",
-        "description",
-        "requirements",
-    ]
-    for f in required_fields:
-        if not data.get(f):
-            return jsonify({"error": f"❌ '{f}' is required"}), 400
-
-    # 🚨 Check for sensitive or personal information
+    data = payload.model_dump()
     for label, field_value in data.items():
         if isinstance(field_value, str):
             if contains_sensitive_data(field_value):
                 return jsonify(
-                    {"error": f"⚠️ Personal/Confidential information is not allowed in '{label}'."}
+                    {"error": f"Personal/confidential information is not allowed in '{label}'."}
                 ), 400
 
             if contains_prompt_injection(field_value):
                 return jsonify(
-                    {"error": f"⚠️ Your entry in '{label}' contains unsafe instructions."}
+                    {"error": f"Your entry in '{label}' contains unsafe instructions."}
                 ), 400
 
-    # ✔ Insert record safely
     try:
         opp_id = execute(
             """
@@ -247,7 +170,7 @@ def api_create_opportunity():
         )
     except sqlite3.Error:
         app.logger.exception("Opportunity creation failed")
-        return jsonify({"error": "❌ Failed to create opportunity"}), 500
+        return jsonify({"error": "Failed to create opportunity"}), 500
 
     # Fetch inserted record and add into vector DB
     opp_row = query_one("SELECT * FROM opportunities WHERE id=?", (opp_id,))
@@ -518,7 +441,6 @@ def chatbot_api():
             }
         )
 
-    # 1) 🔍 Detect casual greeting
     smalltalk_keywords = [
         "hi",
         "hello",
@@ -584,19 +506,19 @@ Respond ONLY using HTML format.
 
 <div class="eva-block">
 
-<h3>🔍 Summary</h3>
+<h3>Summary</h3>
 <p>2-3 sentences answer</p>
 
-<h3>🧩 Recommended Offerings</h3>
+<h3>Recommended Offerings</h3>
 <ul>
 </ul>
 
-<h3>📚 Relevant Case Studies</h3>
+<h3>Relevant Case Studies</h3>
 <table border="1" cellspacing="0" cellpadding="4">
 <tr><th>Case</th><th>Benefit</th></tr>
 </table>
 
-<h3>💼 Business Impact</h3>
+<h3>Business Impact</h3>
 <ul>
 </ul>
 
@@ -619,7 +541,6 @@ User Query:
 {user_query}
 """
 
-    # ✨ Langfuse tracked call
     answer = tracked_llm_call(prompt)
 
     return jsonify({"answer": answer, "format": "html"})
