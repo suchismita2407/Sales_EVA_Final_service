@@ -234,6 +234,7 @@ pybase64==1.5.0
     # via chromadb
 pydantic==2.13.5
     # via
+    #   -r requirements.txt
     #   chromadb
     #   langchain-core
     #   langfuse

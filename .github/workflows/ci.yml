@@ -41,7 +41,7 @@ jobs:
       - name: Lint
         run: ruff check app.py blueprints config.py db.py services scripts tests
       - name: Format check
-        run: ruff format --check app.py blueprints config.py db.py errors.py services scripts tests
+        run: ruff format --check app.py blueprints config.py db.py errors.py schemas.py services scripts tests vector_store.py
 
   audit:
     runs-on: ubuntu-latest
