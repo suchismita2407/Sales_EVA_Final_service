@@ -1,20 +1,27 @@
 import sqlite3
 from typing import Any
 
+from flask import current_app
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from config import Config
 
 
+def get_database_path() -> str:
+    """Use the active Flask app config when available so tests and overrides work."""
+    if current_app:
+        return current_app.config.get("DATABASE_PATH", Config.DATABASE_PATH)
+    return Config.DATABASE_PATH
+
+
 def get_connection():
-    conn = sqlite3.connect(Config.DATABASE_PATH)
+    conn = sqlite3.connect(get_database_path())
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
-def init_db():
-    conn = get_connection()
+def _initialize_schema(conn: sqlite3.Connection) -> None:
     cur = conn.cursor()
 
     # Users
@@ -90,7 +97,6 @@ def init_db():
 
     conn.commit()
 
-    # Upgrade legacy plaintext passwords when an older database is opened.
     cur.execute("SELECT id, password FROM users")
     for user_id, password in cur.fetchall():
         if password and not password.startswith(("scrypt:", "pbkdf2:", "argon2:")):
@@ -99,7 +105,6 @@ def init_db():
                 (generate_password_hash(password), user_id),
             )
 
-    # Seed a default user and some dummy data if empty
     cur.execute("SELECT COUNT(*) FROM users;")
     if cur.fetchone()[0] == 0:
         cur.execute(
@@ -108,7 +113,14 @@ def init_db():
         )
 
     conn.commit()
-    conn.close()
+
+
+def init_db():
+    conn = get_connection()
+    try:
+        _initialize_schema(conn)
+    finally:
+        conn.close()
 
 
 def query_all(sql: str, params: tuple = ()) -> list[dict[str, Any]]:
