@@ -4,19 +4,30 @@ Sales EVA is a Flask service for matching sales opportunities with solution offe
 
 ## Setup
 
-Use Python 3.11 for the supported dependency stack.
+Use Python 3.14 for the supported dependency stack. This repository includes a reproducible dependency lockfile.
 
 ```powershell
-py -3.11 -m venv .venv
+py -3.14 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.lock
 Copy-Item .env.example .env
 ```
 
-For a reproducible install, use the committed `requirements.lock` instead:
+If you need to refresh dependencies:
 
 ```powershell
-python -m pip install -r requirements.lock
+python -m pip install --upgrade pip-tools
+pip-compile --no-index --output-file=requirements.lock requirements.txt
+```
+
+Use the project shortcuts for local validation:
+
+```powershell
+make install
+make test
+make lint
+make typecheck
 ```
 
 Set `SECRET_KEY`, `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`, and `EMBEDDING_MODEL` in `.env`. Langfuse variables are optional. Never commit `.env` or provider keys.
@@ -43,6 +54,17 @@ python app.py
 
 Open `http://127.0.0.1:5000`. LLM-backed routes require valid provider configuration; authentication and database operations work without a live LLM.
 
+## Build and test
+
+These commands require no live LLM or Ollama service:
+
+```powershell
+python -m compileall -q .
+python -m pytest tests -q
+```
+
+The test suite uses offline AI fixtures. CI runs the same test command on every push and pull request, with coverage enforcement.
+
 For production or container deployment:
 
 ```powershell
@@ -62,8 +84,9 @@ Compose routes the container to Ollama running on the host through `host.docker.
 
 ## Architecture
 
-- `app.py` exposes the Flask pages and JSON API routes.
+- `app.py` boots the Flask app and register the project blueprints.
 - `blueprints/auth.py`, `blueprints/pages.py`, and `blueprints/api.py` isolate authentication, page, and read-only API routing.
+- `routes/opportunities.py` owns the opportunity API endpoints and is the single source of truth for opportunity workflows.
 - `services/rag_service.py` retrieves offerings and asks the LLM to rank matches or analyze gaps.
 - `db.py` owns SQLite schema initialization and parameterized query helpers.
 - `vector_store.py` owns the ChromaDB collections used by retrieval.
@@ -77,4 +100,10 @@ Run the offline suite with:
 python -m pytest tests -q
 ```
 
-The tests do not call an external LLM. The Flask route tests require the supported Python 3.11 dependency stack; on incompatible interpreters they are skipped while the database, validator, and upload tests remain runnable. CI also runs Ruff and `pip-audit`.
+The suite is fully offline by default. It mocks the LLM and embedding calls in the test fixtures, so no Ollama or external AI provider is required to validate the app. CI also runs Ruff, mypy, and `pip-audit`.
+
+For a local static check:
+
+```powershell
+python -m mypy .
+```

@@ -32,8 +32,6 @@ configure_logging(app)
 register_security_headers(app)
 register_error_handlers(app)
 
-request_count = 0
-
 
 @app.before_request
 def assign_request_id():
