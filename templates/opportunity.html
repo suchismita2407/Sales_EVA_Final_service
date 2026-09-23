@@ -99,6 +99,13 @@
       <div class="col-lg-5">
 
         <div class="card card-eva p-3 mb-3">
+          <div class="section-title mb-2">Executive Summary</div>
+          <div id="executiveSummary" class="small text-muted">
+            Loading opportunity brief...
+          </div>
+        </div>
+
+        <div class="card card-eva p-3 mb-3">
           <div class="section-title mb-2">EVA Actions</div>
           <div class="d-grid gap-2">
 
@@ -187,18 +194,42 @@ async function loadOpportunity(){
 
   const badge = document.getElementById("oppFitBadge");
 
-  // 👉 FIXED HERE
   const score = opp.fit_score || 0;
   badge.textContent = score + "%";
   badge.className = fitClass(score);
 
-document.getElementById("oppNotes").textContent = opp.description || "No notes.";
+  document.getElementById("oppNotes").textContent = opp.description || "No notes.";
 
   let reqDiv = document.getElementById("requirementsList");
   reqDiv.innerHTML = "";
   opp.requirements.split("\n").forEach(r => reqDiv.innerHTML += `<div class="requirement-line">• ${r}</div>`);
 
   fetchCaseStudies(opp.industry);
+  loadExecutiveSummary();
+}
+
+async function loadExecutiveSummary() {
+  const opp = window.currentOpportunity;
+  if (!opp) return;
+
+  const response = await fetch(`/api/opportunity_summary?opportunity_id=${opp.id}`);
+  const summary = await response.json();
+  const container = document.getElementById("executiveSummary");
+
+  if (!summary || summary.error) {
+    container.innerHTML = "Summary unavailable.";
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="fw-semibold text-dark mb-2">${summary.headline}</div>
+    <div class="mb-2">
+      <span class="badge bg-primary-subtle text-primary me-2">Fit ${summary.fit_score}%</span>
+      <span class="badge bg-success-subtle text-success">Readiness ${summary.readiness_score}%</span>
+    </div>
+    <div class="small text-secondary mb-2">${summary.next_action}</div>
+    <div class="small text-muted">Stage: ${summary.opportunity_stage} • Value: ${summary.deal_value}</div>
+  `;
 }
 
 
